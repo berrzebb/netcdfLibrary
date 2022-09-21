@@ -10,23 +10,41 @@ namespace netCDFLibrary.Data
             using Mat<double> src = new(Rows, Cols, data);
             using Mat<byte> bwSrc = new();
 
-            if((palette.lower == -1 && palette.upper == -1) || palette.isAutoFit)
+            if(palette.isAutoFit)
             {
                 Cv2.MinMaxLoc(src, out double lower, out double upper);
                 palette.lower = lower;
                 palette.upper = upper;
+                palette.UpdatePalette();
             }
+//            src.SaveImage("Original.png");
+
             src.ConvertTo(bwSrc, MatType.CV_8UC3, palette.alpha, palette.beta);
+            //            bwSrc.SaveImage("BlackWhite.png");
             // Min Max Normalized Matrix(0~1) => Black White Matrix(0~255)
             Mat dst = new();
-            Mat filter = new Mat(Rows, Cols, MatType.CV_8U, 0);
-            Cv2.ApplyColorMap(filter, filter, palette.colorMap);
-            filter.GetArray(out Vec3b[] filterData);
+//            Mat filter = new Mat(Rows, Cols, MatType.CV_8U, 0);
+//            Cv2.ApplyColorMap(filter, filter, palette.colorMap);
+//            filter.GetArray(out Vec3b[] filterData);
             // Black White Matrix To Heatmap Matrix
             Cv2.ApplyColorMap(bwSrc, dst, palette.colorMap);
-            Cv2.BitwiseXor(dst, filter, dst);
-            dst.CvtColor(ColorConversionCodes.RGB2BGRA);
+            //Cv2.BitwiseXor(dst, filter, dst);
 
+            if (palette.isContour)
+            {
+                var Threshold = bwSrc.AdaptiveThreshold(255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, palette.maxThreshold, 5);
+                //var Threshold = grayscale.Threshold(palette.threshold, palette.maxThreshold, ThresholdTypes.Binary | ThresholdTypes.Otsu);
+                // Processing Contours
+                using Mat hierachy = new();
+                // Create Threshold
+                Threshold.FindContours(out Mat[] contours, hierachy, RetrievalModes.Tree, ContourApproximationModes.ApproxNone);
+
+                dst.DrawContours(contours, -1, Scalar.FromRgb(255, 255, 255), 1, LineTypes.AntiAlias);
+
+            }
+            
+            dst.CvtColor(ColorConversionCodes.RGB2BGR);
+            
             var channel = Cv2.Split(dst);
             Mat dalpha = new Mat(Rows, Cols, MatType.CV_8UC1, palette.alphaValue * 255);
             Mat a = new Mat();
@@ -34,19 +52,7 @@ namespace netCDFLibrary.Data
             Mat aa = a.BitwiseAnd(dalpha);
             Cv2.Merge(channel.Concat(new[] { aa }).ToArray(), dst);
             dst.GetArray(out Vec4b[] vv);
-            if (isContour)
-            {
-                // Create Threshold
-                using Mat Thresold = new Mat();
-                Cv2.Threshold(bwSrc, Thresold, 127, 255, ThresholdTypes.BinaryInv | ThresholdTypes.Otsu);
-
-                // Processing Contours
-                using Mat hierachy = new();
-                Thresold.FindContours(out Mat[] contours, hierachy, RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
-
-                dst.DrawContours(contours, -1, Scalar.White, 1, LineTypes.AntiAlias);
-            }
-
+            
             return dst;
         }
         private static Mat generate_internal(ColorPalette palette, ref NetCDFPrimitiveData data, bool isContour = false)
@@ -123,6 +129,17 @@ namespace netCDFLibrary.Data
             winMat.SaveImage($"{colorMap.ToString()}.png");
             //            dest = win_mat.clone();
             return winMat;
+        }
+        public static Mat Generate(ColorPalette palette, int Rows, int Cols, ref double[] data, bool isYFlip = false, bool isContour = false)
+        {
+
+            Mat dst = generate_internal(palette, Rows, Cols, data, isContour);
+            if (isYFlip)
+            {
+                dst = dst.Flip(FlipMode.X);
+            }
+            dst.SaveImage("test.png");
+            return dst;
         }
         public static Mat Generate(ColorPalette palette, ref NetCDFPrimitiveData data, bool isYFlip = false, bool isContour = false)
         {

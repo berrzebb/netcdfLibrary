@@ -1,4 +1,5 @@
 ﻿using Microsoft.Research.Science.Data;
+using Microsoft.Research.Science.Data.Utilities;
 
 namespace netCDFLibrary.Data
 {
@@ -21,10 +22,8 @@ namespace netCDFLibrary.Data
         internal DataScale(Variable variable) : this(variable, defaultScaleFactorKeys, defaultAddOffsetKeys, defaultMissingValueKeys, defaultFillValueKeys) { }
         internal DataScale(Variable variable, string[] ScaleFactorKeys, string[] AddOffsetKeys, string[] MissingValueKeys, string[] FillValueKeys)
         {
-            if (variable.Metadata.ContainsKey("name"))
-            {
-                this.Name = Convert.ToString(variable.Metadata["name"]);
-            }
+            this.Name = variable.Metadata.GetDisplayName();
+            this.Units = variable.Metadata.GetUnits();
             if (variable.Metadata.ContainsKey("long_name"))
             {
                 this.LongName = Convert.ToString(variable.Metadata["long_name"]);
@@ -32,10 +31,6 @@ namespace netCDFLibrary.Data
             if (variable.Metadata.ContainsKey("standard_name"))
             {
                 this.StandardName = Convert.ToString(variable.Metadata["standard_name"]);
-            }
-            if (variable.Metadata.ContainsKey("units"))
-            {
-                this.Units = Convert.ToString(variable.Metadata["units"]);
             }
             foreach (string scaleFactor in ScaleFactorKeys)
             {

@@ -1,11 +1,16 @@
 ﻿using Microsoft.Research.Science.Data;
 using Microsoft.Research.Science.Data.Imperative;
+using Microsoft.Research.Science.Data.Utilities;
+using netCDFLibrary.Extensions;
 using OpenCvSharp;
 using Range = Microsoft.Research.Science.Data.Range;
 using SystemRange = System.Range;
 namespace netCDFLibrary.Data
 {
-    public record NetCDFBoundaries(double MinX, double MaxX, double MinY, double MaxY, double Width, double Height, bool isYFlip);
+    public record NetCDFBoundaries(double MinX, double MaxX, double MinY, double MaxY, double Width, double Height, bool isYFlip)
+    {
+        public readonly static NetCDFBoundaries Empty = new NetCDFBoundaries(0, 0, 0, 0, 0, 0, false);
+    }
 
     public class CoordinateTransformatter
     {
@@ -19,6 +24,12 @@ namespace netCDFLibrary.Data
         public static Dim[] Create(params (string name, SystemRange range)[] name) => name.Select(v => new Dim(v.name, v.range)).ToArray();
         public static Dim[] Create(params string[] name) => name.Select(v => new Dim(v, SystemRange.StartAt(0))).ToArray();
         public static Dim[] Create(params (string name, int index)[] dim) => dim.Select(v => new Dim(v.name, new SystemRange(v.index, v.index))).ToArray();
+    }
+    public record DataSetDim(string name, Range range, int Length)
+    {
+        public static DataSetDim Create(string name, Range range, int length) => new DataSetDim(name, range, length);
+        public static DataSetDim Create(string name, (Range range, int length) v) => new DataSetDim(name, v.range, v.length);
+
     }
     public record StatisticsData(double MinValue, double MaxValue, double AvgValue)
     {
@@ -70,7 +81,13 @@ namespace netCDFLibrary.Data
             ret.scaler = new CoordinateScaler(minX, maxX, minY, maxY, width, height);
             return ret;
         }
-
+        public double this[(int row, int col) index]
+        {
+            get
+            {
+                return this[index.row, index.col];
+            }
+        }
         public double this[int row, int col]
         {
             get
@@ -139,67 +156,33 @@ namespace netCDFLibrary.Data
         public double MaxY => this.boundaries.MaxY;
 
         protected Dim[] dims;
-        protected (string, Range, int)[] Dimensions;
+        protected Dictionary<string, string>? lookup;
+        protected DataSetDim[] Dimensions;
         private readonly NetCDFVariable? source;
         private readonly NetCDFBoundaries boundaries = new NetCDFBoundaries(0,0,0,0, 0,0, false);
-        public NetCDFData(NetCDFVariable? variable, params Dim[] dims)
+        public NetCDFData(NetCDFVariable? variable, Dictionary<string, string>? lookup, params Dim[] dims)
         {
             if (variable == null)
             {
                 throw new InvalidOperationException("source null");
             }
+            this.lookup = lookup;
             this.source = variable;
 
             this.dims = dims;
             this.Dimensions = dims.Select((v, i) =>
             {
-                int Offset = 0;
-                int Length = 0;
-                if(v.range.Start.Value != 0 && v.range.End.Value != 0)
-                {
-                    if (v.range.Start.Value == v.range.End.Value)
-                    {
-                        (Offset, Length) = v.range.GetOffsetAndLength(this.source.Shape[i]);
-                        if(Length == 0)
-                        {
-                            return (v.name, DataSet.Range(Offset), 1);
-                        } else
-                        {
-                            return (v.name, DataSet.Range(Offset, Length - 1), Length);
-                        }
-                    } else
-                    {
-                        Offset = v.range.Start.Value;
-                        Length = v.range.End.Value;
-                        return (v.name, DataSet.Range(Offset, Length - 1), Length - Offset);
-                    }
-                }
-                (Offset, Length) = v.range.GetOffsetAndLength(this.source.Shape[i]);
-                if(Length == 0)
-                {
-                    return (v.name, DataSet.Range(Offset), 1);
-                } else
-                {
-                    return (v.name, DataSet.Range(Offset, Length - 1), Length);
-                }
+                var (range, length) = v.range.Convert(this.source.Shape[i]);
+                return DataSetDim.Create(v.name, range, length);
             }).ToArray();
 
-            var (YName, YRange, YCount) = this.Dimensions[^2];
-            var (XName, XRange, XCount) = this.Dimensions[^1];
+            var YDim = this.Dimensions[^2];
+            var XDim = this.Dimensions[^1];
 
-            var YIndex = variable.source.Index<double>(YName)[dims[^2].range];
-            var XIndex = variable.source.Index<double>(XName)[dims[^1].range];
 
             // Y 의 Min Max는 반전 될 수 있기 때문에 먼저 시작과 끝을 비교한다.
-            this.IsYFlip = YIndex[0] < YIndex[YCount - 1];
-            this.boundaries = new NetCDFBoundaries(
-                XIndex[0], XIndex[XCount - 1],
-                this.IsYFlip ? YIndex[0] : YIndex[YCount - 1],
-            this.IsYFlip ? YIndex[YCount - 1] : YIndex[0],
-            XCount,
-            YCount,
-            this.IsYFlip
-            );
+            this.boundaries = variable.source.GetBoundaries(XDim, YDim, lookup);
+            this.IsYFlip = this.boundaries.isYFlip;
         }
         public static implicit operator NetCDFPrimitiveData(NetCDFData data) => data.ToPrimitive();
         private NetCDFPrimitiveData ToPrimitive()
@@ -209,21 +192,50 @@ namespace netCDFLibrary.Data
                 return NetCDFPrimitiveData.Empty;
             }
             var dataScale = this.source.DataScale;
-            int RowLength = this.Dimensions[^2].Item3;
-            int ColLength = this.Dimensions[^1].Item3;
-            var data = this.source.DataSet.GetData<Array>(this.source.VariableId, this.Dimensions.Select(v => v.Item2).ToArray());
-            Mat src = new(RowLength, ColLength, MatType.CV_16S, data);
+            int RowLength = this.Dimensions[^2].Length;
+            int ColLength = this.Dimensions[^1].Length;
+
+            var data = this.source.DataSet.GetData<Array>(this.source.VariableId, this.Dimensions.Select(v => v.range).ToArray());
+            MatType type = MatType.CV_16S;
+            switch (Type.GetTypeCode(this.source.variable.TypeOfData))
+            {
+                case TypeCode.Single:
+                    type = MatType.CV_32F;
+                    break;
+                case TypeCode.Double:
+                    type = MatType.CV_64F;
+                    break;
+                default:
+                    type = MatType.CV_16S;
+                    break;
+            }
+            Mat src = new(RowLength, ColLength, type, data);
             Mat dest = new Mat();
-            src.ConvertTo(dest, MatType.CV_64F, dataScale.ScaleFactor, dataScale.AddOffset);
-            var MissingValue = (dataScale.MissingValue * dataScale.ScaleFactor) + dataScale.AddOffset;
-            for(int row = 0; row < RowLength; row++)
+            double alpha = dataScale.ScaleFactor;
+            double beta = dataScale.AddOffset;
+            src.ConvertTo(dest, MatType.CV_64F, alpha, beta);
+            object MissingValue = double.NaN;
+            if (type == MatType.CV_16S)
+            {
+                MissingValue = (dataScale.MissingValue * dataScale.ScaleFactor) + dataScale.AddOffset;
+            } else
+            {
+                MissingValue = this.source.variable.GetMissingValue();
+                if(MissingValue == null)
+                {
+                    MissingValue = double.NaN;
+                }
+            }
+            var indexer = dest.GetGenericIndexer<double>();
+
+            for (int row = 0; row < RowLength; row++)
             {
                 for(int col = 0; col < ColLength; col++)
                 {
-                    var v = dest.Get<double>(row, col);
-                    if(v == MissingValue)
+                    var v = indexer[row, col];
+                    if(v == (double)MissingValue || double.IsNaN(v) || v == 9.9999999338158125E+36)
                     {
-                        dest.Set(row, col, double.NaN);
+                        indexer[row, col] = double.NaN;
                     }
                 }
             }
@@ -261,9 +273,9 @@ namespace netCDFLibrary.Data
             this.DataScale = dataScale;
         }
 
-        public NetCDFData this[params Dim[] dims]
+        public NetCDFData this[Dictionary<string, string>? lookup,params Dim[] dims]
         {
-            get => new NetCDFData(this, dims);
+            get => new NetCDFData(this, lookup, dims);
         }
 
         public void Dispose()

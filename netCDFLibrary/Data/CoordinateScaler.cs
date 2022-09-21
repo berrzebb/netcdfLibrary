@@ -3,6 +3,7 @@
     public class CoordinateScaler
     {
         public static CoordinateScaler Empty = new CoordinateScaler(0, 0, 0, 0, 0, 0);
+
         public double MinX { get; }
         public double MaxX { get; }
         public double MinY { get; }
@@ -113,6 +114,11 @@
                 {
                     actualMinY = this.YOffset(row - 1);
                     minYIndex = row - 1;
+                    if (isYFlip)
+                    {
+                        minYIndex = (int)this.Height - minYIndex;
+                    }
+
                     foundMinY = true;
                 }
 
@@ -122,14 +128,24 @@
                     {
                         actualMaxY = this.XOffset(0);
                         maxYIndex = 0;
-                        foundMaxY = true;
                     }
                     else
                     {
                         actualMaxY = this.YOffset(row - 1);
                         maxYIndex = row - 1;
-                        foundMaxY = true;
                     }
+                    if (isYFlip)
+                    {
+                        maxYIndex = (int)this.Height - maxYIndex;
+                    }
+
+                    foundMaxY = true;
+
+                }
+
+                if (foundMinX && foundMaxX)
+                {
+                    continue;
                 }
 
                 for (int col = 0; col < this.Width; col++)

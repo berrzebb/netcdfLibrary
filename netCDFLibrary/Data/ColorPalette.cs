@@ -13,12 +13,17 @@ namespace netCDFLibrary.Data
         public double lower { get; set; }
         public double upper { get; set; }
         public bool isAutoFit { get; set; }
+        public bool isContour { get; set; }
+
         public double alphaValue { get; set; }
         public double alpha2 => (this.alphaValue * 255) / (this.upper - this.lower);
         public double beta2 => -(this.alphaValue * 255) * this.lower / (this.upper - this.lower);
 
         public double alpha => 255.0 / (this.upper - this.lower);
         public double beta => -255.0 * this.lower / (this.upper - this.lower);
+
+        public byte threshold { get; set; }
+        public byte maxThreshold { get; set; }
 
         public LinearGradientBrush ColorBrush { get; private set; } = new LinearGradientBrush();
         private ColorPalette() {
@@ -28,11 +33,13 @@ namespace netCDFLibrary.Data
         {
             get
             {
-                Mat src = new Mat(1, 1, MatType.CV_64F, value);
-                src.ConvertTo(src, MatType.CV_8UC3, this.alpha2, this.beta2);
-                Cv2.ApplyColorMap(src, src, this.colorMap);
-                var c = src.Get<Vec3b>(0, 0);
-                return Color.FromArgb(255, c[0], c[1], c[2]);
+                var normalizedValue = (value - this.lower) / (this.upper - this.lower);
+                var colorIndex = (int)(normalizedValue * this.colorCount);
+                if(colorIndex > this.colorCount - 1)
+                {
+                    colorIndex = this.colorCount - 1;
+                }
+                return this.ColorTable[colorIndex];
             }
         }
         public Color GetColor(int idx)
@@ -44,8 +51,48 @@ namespace netCDFLibrary.Data
 
             return this.ColorTable[idx];
         }
-        public static ColorPalette Create(string colorMap, double lower = 0, double upper = 1, int colorCount = 255, double alphaValue = 1.0, bool isAutoFit = false) => Create(colorMaps.ContainsKey(colorMap) ? colorMaps[colorMap] : colorMaps["virdis"], lower, upper, colorCount, alphaValue, isAutoFit);
-        public static ColorPalette Create(ColormapTypes colorMap, double lower = 0, double upper = 1, int colorCount = 255, double alphaValue = 1.0, bool isAutoFit = false) {
+        public void UpdatePalette()
+        {
+            Mat colorSrc = new Mat(new Size(1, this.colorCount), MatType.CV_64F);
+            var colorSrcIndexer = colorSrc.GetGenericIndexer<double>();
+            for (int i = 0; i < colorSrc.Rows; i++)
+            {
+                var ratio = (double)i / colorSrc.Rows;
+                var value = ratio * (this.upper - this.lower) + this.lower;
+                colorSrcIndexer[0, i] = value;
+            }
+            colorSrc.GetArray<double>(out double[] values);
+            Mat bwSrc = new();
+            colorSrc.ConvertTo(bwSrc, MatType.CV_8UC3, this.alpha, this.beta);
+
+            Mat cb = new Mat();
+            Cv2.ApplyColorMap(bwSrc, cb, this.colorMap);
+
+            this.ColorTable = new List<Color>(cb.Rows);
+            for (int i = 0; i < cb.Rows; i++)
+            {
+                var v = cb.Get<Vec3b>(i, 0);
+                this.ColorTable.Add(Color.FromArgb(255, v[2], v[1], v[0]));
+            }
+            List<GradientStop> colors = new List<GradientStop>();
+            for (int i = 0; i < this.ColorTable.Count; i++)
+            {
+
+                colors.Add(new GradientStop()
+                {
+                    Color = this.ColorTable[i],
+                    Offset = (float)i / this.colorCount
+                });
+            }
+            this.ColorBrush = new LinearGradientBrush()
+            {
+                StartPoint = new System.Windows.Point(0, 0),
+                EndPoint = new System.Windows.Point(0, 1),
+                GradientStops = new GradientStopCollection(colors)
+            };
+        }
+        public static ColorPalette Create(string colorMap, double lower = 0, double upper = 1, int colorCount = 255, double alphaValue = 1.0, bool isAutoFit = false, bool isContour = false,  byte threshold = 127, byte maxThreshold = 255) => Create(colorMaps.ContainsKey(colorMap) ? colorMaps[colorMap] : colorMaps["Viridis"], lower, upper, colorCount, alphaValue, isAutoFit, isContour, threshold, maxThreshold);
+        public static ColorPalette Create(ColormapTypes colorMap, double lower = 0, double upper = 1, int colorCount = 255, double alphaValue = 1.0, bool isAutoFit = false,bool isContour = false, byte threshold = 127, byte maxThreshold = 255) {
             var palette = new ColorPalette()
             {
                 colorMap = colorMap,
@@ -53,41 +100,12 @@ namespace netCDFLibrary.Data
                 upper = upper,
                 colorCount = colorCount,
                 alphaValue = alphaValue,
-                isAutoFit = isAutoFit
+                isAutoFit = isAutoFit,
+                isContour = isContour,
+                threshold = threshold,
+                maxThreshold = maxThreshold
             };
-            Mat ColorBar = new Mat(new Size(1, colorCount), MatType.CV_8UC3, new Scalar(255, 255, 255));
-            for (int i = 0; i < ColorBar.Rows; i++)
-            {
-                byte v = (byte)(255 - 255 * i / ColorBar.Rows);
-
-                ColorBar.Set(i, 0, new Vec3b(v, v, v));
-            }
-            ColorBar.ConvertTo(ColorBar, MatType.CV_8UC3);
-            Mat cb = new Mat();
-            Cv2.ApplyColorMap(ColorBar, cb, colorMap);
-
-            palette.ColorTable = new List<Color>(cb.Rows);
-            for(int i = 0; i < cb.Rows; i++)
-            {
-                var v = cb.Get<Vec3b>(i, 0);
-                palette.ColorTable.Add(Color.FromArgb(255, v[0], v[1], v[2]));
-            }
-            List<GradientStop> colors = new List<GradientStop>();
-            for (int i = 0; i < palette.ColorTable.Count; i++)
-            {
-
-                colors.Add(new GradientStop()
-                {
-                    Color = palette.ColorTable[i],
-                    Offset = (float)i / colorCount
-                });
-            }
-            palette.ColorBrush = new LinearGradientBrush()
-            {
-                StartPoint = new System.Windows.Point(0, 0),
-                EndPoint = new System.Windows.Point(0, 1),
-                GradientStops = new GradientStopCollection(colors)
-            };
+            palette.UpdatePalette();
             return palette;
     }
     }

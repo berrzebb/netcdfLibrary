@@ -1,48 +1,93 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Research.Science.Data;
+
+using Microsoft.Research.Science.Data.Utilities;
 using netCDFLibrary.Data;
+using netCDFLibrary.Extensions;
 
 namespace netCDFLibrary
 {
     public class NetCDFLib : IDisposable
     {
+        private readonly static object[] Empty = Array.Empty<object>();
         private readonly DataSet dataSet;
         private readonly DateTime unixDate = new DateTime(1990, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         public ReadOnlyDimensionList Dimensions => this.dataSet.Dimensions;
         public ReadOnlyVariableCollection Variables => this.dataSet.Variables;
-        public NetCDFBoundaries GetBoundaries(string X = "", string Y = "")
+
+        public NetCDFBoundaries GetBoundaries(Dim X, Dim Y, Dictionary<string, string>? lookup = null)
         {
-            Dimension XDim, YDim;
-            if(string.IsNullOrEmpty(X) && string.IsNullOrEmpty(Y))
+            if (!this.Dimensions.Contains(X.name) || !this.Dimensions.Contains(Y.name))
             {
-                YDim = this.dataSet.Dimensions[^2];
-                XDim = this.dataSet.Dimensions[^1];
-            } else
-            {
-                YDim = this.dataSet.Dimensions[Y];
-                XDim = this.dataSet.Dimensions[X];
+                return NetCDFBoundaries.Empty;
             }
-            var XIndex = this.Index<double>(XDim.Name);
-            var YIndex = this.Index<double>(YDim.Name);
+
+            var XIndex = this.Dimensions[X.name];
+            var YIndex = this.Dimensions[Y.name];
+                        
+
+            var XDim = DataSetDim.Create(X.name, X.range.Convert(XIndex.Length));
+            var YDim = DataSetDim.Create(Y.name, Y.range.Convert(YIndex.Length));
+            return this.GetBoundaries(XDim, YDim, lookup);
+        }
+        public NetCDFBoundaries GetBoundaries(DataSetDim X, DataSetDim Y, Dictionary<string, string>? lookup = null)
+        {
+            object[]? YIndex = Array.Empty<object>();
+            object[]? XIndex = Array.Empty<object>();
+            if (lookup != null)
+            {
+                var xName = lookup.ContainsKey(X.name) ? lookup[X.name] : X.name;
+                var yName = lookup.ContainsKey(Y.name) ? lookup[Y.name] : Y.name;
+
+                Variable? XVariable = null;
+                Variable? YVariable = null;
+                if (this.Variables.Contains(xName))
+                {
+                    XVariable = this.Variables[xName];
+                }
+                if (this.Variables.Contains(yName))
+                {
+                    YVariable = this.Variables[yName];
+                }
+                // Lookup에 해당하는 참조 변수가 없다면 비어 있는 바운더리 반환
+                if(XVariable == null || YVariable == null)
+                {
+                    return NetCDFBoundaries.Empty;
+                }
+                // ROMS 데이터는 수직으로 같은 값 수평으로 같은 값을 읽어 오도록 구성 되어 있음.
+
+                var XArr = XVariable.GetData(new[] { 0, X.range.Origin }, new[] { 1, X.range.Count });
+                XIndex = XArr.Cast<object>().ToArray();
+                var YArr = YVariable.GetData(new[] { Y.range.Origin, 0 }, new[] { Y.range.Count, 1 });
+                YIndex = YArr.Cast<object>().ToArray();
+            }
+            else
+            {
+                YIndex = this.Index(Y);
+                XIndex = this.Index(X);
+            }
+
 
             // Y 의 Min Max는 반전 될 수 있기 때문에 먼저 시작과 끝을 비교한다.
-            var IsYFlip = YIndex[0] < YIndex[YDim.Length - 1];
+            var MinY = (double)Convert.ChangeType(YIndex[0], typeof(double));
+            var MaxY = (double)Convert.ChangeType(YIndex[Y.Length - 1], typeof(double));
+            var MinX = (double)Convert.ChangeType(XIndex[0], typeof(double));
+            var MaxX = (double)Convert.ChangeType(XIndex[X.Length - 1], typeof(double));
+
+            var IsYFlip = MinY < MaxY;
             return new NetCDFBoundaries(
-                XIndex[0], XIndex[XDim.Length - 1],
-                IsYFlip ? YIndex[0] : YIndex[YDim.Length - 1],
-                IsYFlip ? YIndex[YDim.Length - 1] : YIndex[0],
-                XDim.Length,
-                YDim.Length,
+                MinX, MaxX,
+                Math.Min(MinY, MaxY),
+                Math.Max(MinY, MaxY),
+                X.Length,
+                Y.Length,
                 IsYFlip
             );
         }
         public NetCDFLib(string path)
         {
             this.dataSet = DataSet.Open($"{path}?openMode=readOnly");
-            var Y = this.dataSet.Dimensions[^2];
-            var X = this.dataSet.Dimensions[^1];
-
         }
         public void ShowMetadata()
         {
@@ -56,23 +101,31 @@ namespace netCDFLibrary
                 Console.WriteLine(metadata);
             }
         }
-        public T[] Index<T>(string key)
+        public object[] Index(string key)
         {
-            if (this.dataSet == null)
+            return this.Index(key, ..);
+        }
+        public object[] Index(DataSetDim dim)
+        {
+            if (this.dataSet == null || !this.dataSet.Variables.Contains(dim.name) || !this.Variables.Contains(dim.name))
             {
-                return Array.Empty<T>();
+                return Empty;
             }
-            if (!this.dataSet.Variables.Contains(key))
+            var variable = this.Variables[dim.name];
+
+            return variable.GetData(new[] { dim.range.Origin }, new[] { dim.range.Count }).Cast<object>().ToArray();
+        }
+        public object[] Index(string key, System.Range range)
+        {
+            if (this.dataSet == null || !this.dataSet.Variables.Contains(key) || !this.Variables.Contains(key) || !this.Dimensions.Contains(key))
             {
-                return Array.Empty<T>();
-            }
-            if (!this.Variables.Contains(key))
-            {
-                return Array.Empty<T>();
+                return Empty;
             }
             var variable = this.Variables[key];
+            var dimension = this.Dimensions[key];
+            var (r, l) = range.Convert(dimension.Length);
 
-            return variable.GetData().Cast<object>().Select(v => (T)Convert.ChangeType(v, typeof(T))).ToArray();
+            return variable.GetData(new[] { r.Origin }, new[] { r.Count }).Cast<object>().ToArray();
         }
         public NetCDFVariable this[string layer]
         {
@@ -132,9 +185,9 @@ namespace netCDFLibrary
                     _ => new GregorianCalendar(),
                 };
             }
-            if (variables.Metadata.ContainsKey("units"))
+            var units = variables.Metadata.GetUnits();
+            if (!string.IsNullOrEmpty(units))
             {
-                var units = (string)variables.Metadata["units"];
                 if (units.Contains(" since "))
                 {
                     var item = units.Split(" since ");
