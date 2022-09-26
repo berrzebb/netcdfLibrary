@@ -7,36 +7,31 @@ CoordinateTransformatter transformatter = new CoordinateTransformatter();
 using (NetCDFLib lib = new NetCDFLib("F:\\sds\\sampleData\\ERA5_2021.nc"))
 {
     lib.ShowMetadata();
-    foreach (var item in Enum.GetValues<ColormapTypes>())
-    {
-        HeatMapBuilder.generate_colorMap(item,lib["t2m"].Units, 0, 1, 256);
-    }
     var times = lib.TimeIndex();
     {
         for (int time = 0; time < lib.Dimensions[0].Length; time++)
         {
-            Dim dim = new Dim("time", new System.Range(time, time));
-            NetCDFPrimitiveData data = lib["t2m"][
-                Dim.Create("time", time..time),
-                Dim.Create("latitude", ..),
-                Dim.Create("longitude", ..)
+            NetCDFPrimitiveData data = lib["t2m"][null,
+                Dim.Create(("time",time..time), ("latitude", ..),("longitude", ..))
             ];
 
-            var palette = ColorPalette.Create(ColormapTypes.Viridis, -1, -1, 255);
-            HeatMapBuilder.Generate(transformatter, ,palette, ref data, $"heatmap\\ERA5\\t2m\\{time}.png", isContour: true);
+            var palette = ColorPalette.Create(new ColorPaletteOptions(ColormapTypes.Viridis, -1, -1, 255));
+            HeatMapBuilder.Generate(palette, ref data, $"heatmap\\ERA5\\t2m\\{time}.png");
 
-            NetCDFPrimitiveData UData = lib["u10"][Dim.Create("time", time..time),
-                Dim.Create("latitude", ..),
-                Dim.Create("longitude", ..)
+            NetCDFPrimitiveData UData = lib["u10"][null, Dim.Create(
+                ("time", time..time),
+                ("latitude", ..),
+                ("longitude", ..))
             ];
             
-            NetCDFPrimitiveData VData = lib["v10"][Dim.Create("time", time..time),
-                Dim.Create("latitude", ..),
-                Dim.Create("longitude", ..)
+            NetCDFPrimitiveData VData = lib["v10"][null, Dim.Create(
+                ("time", time..time),
+                ("latitude", ..),
+                ("longitude", ..))
             ];
 
-            palette = ColorPalette.Create(ColormapTypes.Viridis, -1, -1, 255);
-            HeatMapBuilder.Generate(transformatter,palette, ref UData, ref VData, $"heatmap\\ERA5\\uv\\{time}.png", isContour: true);
+            palette = ColorPalette.Create(new ColorPaletteOptions(ColormapTypes.Viridis, -1, -1, 255));
+            //HeatMapBuilder.Generate(palette,UData, ref VData, $"heatmap\\ERA5\\uv\\{time}.png", new HeatMapOptions());
 
         }
     }
@@ -45,43 +40,46 @@ using (NetCDFLib lib = new NetCDFLib("F:\\sds\\sampleData\\HYCOM2010_2021\\2021\
 {
     lib.ShowMetadata();
     var times = lib.TimeIndex();
-    var depths = lib.Index<double>("depth");
+    var depths = lib.Index("depth");
     for (int time = 0; time < lib.Dimensions[0].Length; time++)
     {
         for (int depth = 0; depth < lib.Dimensions[1].Length; depth++)
         {
-            var palette = ColorPalette.Create(ColormapTypes.Ocean, -1, -1, 255);
-            NetCDFPrimitiveData data = lib["salinity"][
-                Dim.Create("time", time..time),
-                Dim.Create("depth", depth..depth),
-                Dim.Create("lat", ..),
-                Dim.Create("lon", ..)
+            var palette = ColorPalette.Create(new ColorPaletteOptions(ColormapTypes.Ocean, -1, -1, 255));
+            NetCDFPrimitiveData data = lib["salinity"][null,
+                Dim.Create(
+                    ("time", time..time),
+                    ("depth", depth..depth),
+                    ("lat", ..),
+                    ("lon", ..))
             ];
-            HeatMapBuilder.Generate(transformatter, palette, ref data, $"heatmap\\HYCOM\\salinity\\{time}_{depths[depth]}m.png", true, true);
-            data = lib["water_temp"][
-                Dim.Create("time", time..time),
-                Dim.Create("depth", depth..depth),
-                Dim.Create("lat", ..),
-                Dim.Create("lon", ..)
+            HeatMapBuilder.Generate(palette, ref data, $"heatmap\\HYCOM\\salinity\\{time}_{depths[depth]}m.png");
+            data = lib["water_temp"][null,
+                Dim.Create(
+                    ("time", time..time),
+                    ("depth", depth..depth),
+                    ("lat", ..),
+                    ("lon", ..))
             ];
-            palette = ColorPalette.Create(ColormapTypes.Ocean, -1, -1, 255);
-            HeatMapBuilder.Generate(transformatter, palette, ref data, $"heatmap\\HYCOM\\water_temp\\{time}_{depths[depth]}m.png", true, true);
+            palette = ColorPalette.Create(new ColorPaletteOptions(ColormapTypes.Ocean, -1, -1, 255));
+            HeatMapBuilder.Generate(palette, ref data, $"heatmap\\HYCOM\\water_temp\\{time}_{depths[depth]}m.png");
 
-            NetCDFPrimitiveData UData = lib["water_u"][
-                Dim.Create("time", time..time),
-                Dim.Create("depth", depth..depth),
-                Dim.Create("lat", ..),
-                Dim.Create("lon", ..)
+            NetCDFPrimitiveData UData = lib["water_u"][null,
+                Dim.Create(
+                    ("time", time..time),
+                    ("depth", depth..depth),
+                    ("lat", ..),
+                    ("lon", ..))];
+            NetCDFPrimitiveData VData = lib["water_v"][null,
+                Dim.Create(
+                    ("time", time..time),
+                    ("depth", depth..depth),
+                    ("lat", ..),
+                    ("lon", ..))
             ];
-            NetCDFPrimitiveData VData = lib["water_v"][
-                Dim.Create("time", time..time),
-                Dim.Create("depth", depth..depth),
-                Dim.Create("lat", ..),
-                Dim.Create("lon", ..)
-            ];
-            palette = ColorPalette.Create(ColormapTypes.Ocean, -1, -1, 255);
+            palette = ColorPalette.Create(new ColorPaletteOptions(ColormapTypes.Ocean, -1, -1, 255));
 
-            HeatMapBuilder.Generate(transformatter, palette, ref UData, ref VData, $"heatmap\\HYCOM\\water_uv\\{time}_{depths[depth]}m.png", true);
+            //HeatMapBuilder.Generate(palette, ref UData, ref VData, $"heatmap\\HYCOM\\water_uv\\{time}_{depths[depth]}m.png", true);
 
         }
     }

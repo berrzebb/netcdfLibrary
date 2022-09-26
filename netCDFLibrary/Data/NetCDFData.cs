@@ -21,6 +21,10 @@ namespace netCDFLibrary.Data
     {
         public static Dim Create(string name, SystemRange index) => new Dim(name, index);
         public static Dim Create(string name) => new(name, 0..1);
+        public static Dim[] Create(Dim[] dims, params (string name, SystemRange range)[] name) => dims.Concat(name.Select(v => new Dim(v.name, v.range))).ToArray();
+        public static Dim[] Create(Dim[] dims, params string[] name) => dims.Concat(name.Select(v => new Dim(v, SystemRange.StartAt(0)))).ToArray();
+        public static Dim[] Create(Dim[] dims, params (string name, int index)[] dim) => dims.Concat(dim.Select(v => new Dim(v.name, new SystemRange(v.index, v.index)))).ToArray();
+
         public static Dim[] Create(params (string name, SystemRange range)[] name) => name.Select(v => new Dim(v.name, v.range)).ToArray();
         public static Dim[] Create(params string[] name) => name.Select(v => new Dim(v, SystemRange.StartAt(0))).ToArray();
         public static Dim[] Create(params (string name, int index)[] dim) => dim.Select(v => new Dim(v.name, new SystemRange(v.index, v.index))).ToArray();
