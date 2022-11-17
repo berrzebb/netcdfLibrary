@@ -60,6 +60,10 @@ namespace netCDFLibrary.Data
                     this.MissingValue = Convert.ToDouble(variable.Metadata[missingValue]);
                 }
             }
+            if (double.IsNaN(this.MissingValue))
+            {
+                this.MissingValue = this.FillValue;
+            }
         }
         internal double Transform(object? value)
         {

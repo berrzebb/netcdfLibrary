@@ -5,7 +5,7 @@ namespace netCDFLibrary.Data
 {
     public class ColorPaletteOptions
     {
-        public ColormapTypes colorMap { get; set; } = ColormapTypes.Viridis;
+        public ColormapTypes colorMap { get; set; } = ColormapTypes.Jet;
         public int colorCount { get; set; } = 255;
         public double lower { get; set; } = 0;
         public double upper { get; set; } = 1;
@@ -14,14 +14,60 @@ namespace netCDFLibrary.Data
         public bool isYFlip { get; set; } = false;
         public bool isAutoFit { get; set; } = true;
         public bool isContour { get; set; } = false;
-        public bool isReverseColor { get; set; } = true;
+        public bool isReverseColor { get; set; } = false;
         public byte threshold { get; set; }
         public byte maxThreshold { get; set; }
 
         public double DataRange => (this.upper - this.lower);
         public double DataOffset => this.lower / this.DataRange;
         public double Normalize(double value) => (value - this.lower) / this.DataRange;
+
+        public double Normalize(double value, double outMin, double outMax)
+        {
+            if (double.IsNaN(value))
+            {
+                return value;
+            }
+
+            if (double.Equals(value, this.lower))
+            {
+                return outMin;
+            }
+
+            if (double.Equals(value, this.upper))
+            {
+                return outMax;
+            }
+
+            var ret = ((value - this.lower) / (this.upper - this.lower));
+            if (ret < 0)
+            {
+                ret = 0;
+            }
+
+            if (ret > 1)
+            {
+                ret = 1;
+            }
+
+            ret = ret * (outMax - outMin) + outMin;
+            return ret;
+            
+        }
+            
         public double Transform(double ratio) => ratio * this.DataRange + this.lower;
+
+        public IEnumerable<string> GenerateTicks(int tickCount = 7)
+        {
+            for(int i = 0; i < this.colorCount; i++) {
+                if (i % tickCount == 0)
+                {
+                    var ratio = (double)i / this.colorCount;
+                    var value = this.Transform(ratio);
+                    yield return value.ToString("0.00#");
+                }
+            }
+        }
         public ColorPaletteOptions(ColormapTypes colorMap, double lower = 0.0, double upper = 1.0, int colorCount = 255)
         {
             this.colorMap = colorMap;
@@ -29,7 +75,8 @@ namespace netCDFLibrary.Data
             this.upper = upper;
             this.colorCount = colorCount;
         }
-        public ColorPaletteOptions(string colorMap = "Viridis", double lower = 0.0, double upper = 1.0, int colorCount = 255) : this(ColorPalette.colorMaps.ContainsKey(colorMap) ? ColorPalette.colorMaps[colorMap] : ColormapTypes.Viridis, lower, upper, colorCount)
+        public ColorPaletteOptions(string colorMap = "Jet", double lower = 0.0, double upper = 1.0, int colorCount = 255)
+            : this(ColorPalette.colorMaps.ContainsKey(colorMap) ? ColorPalette.colorMaps[colorMap] : ColormapTypes.Jet, lower, upper, colorCount)
         {
         }
     }
@@ -46,7 +93,9 @@ namespace netCDFLibrary.Data
         public double alpha => 255.0 / this.Options.DataRange;
         public double beta => -255.0 * this.Options.DataOffset;
 
+        public double tickCount { get; init;  }
         public LinearGradientBrush ColorBrush { get; private set; } = new LinearGradientBrush();
+
         private ColorPalette() {
         }
         private List<Color> ColorTable = new List<Color>();
@@ -54,15 +103,23 @@ namespace netCDFLibrary.Data
         {
             get
             {
-                var normalizedValue = this.Options.Normalize(value);
-                var colorCount = this.Options.colorCount;
-                var colorIndex = Math.Abs((int)(normalizedValue * colorCount));
-                if(colorIndex > colorCount - 1)
-                {
-                    colorIndex = colorCount - 1;
-                }
-                return this.ColorTable[colorIndex];
+                int colorIndex = this.GetColorIndex(value);
+
+                return this.GetColor(colorIndex);
             }
+        }
+        public int GetColorIndex(double value)
+        {
+            var normalizedValue = this.Options.Normalize(value);
+            var colorCount = this.Options.colorCount;
+            var isReverse = this.Options.isReverseColor;
+            var refCount = (!isReverse ? colorCount : 0);
+            var colorIndex = Math.Abs((refCount - (int)(normalizedValue * colorCount)));
+            if (colorIndex > colorCount - 1)
+            {
+                colorIndex = colorCount - 1;
+            }
+            return colorIndex;
         }
         public Color GetColor(int idx)
         {
@@ -93,7 +150,7 @@ namespace netCDFLibrary.Data
             Mat bwSrc = new();
             colorSrc.ConvertTo(bwSrc, MatType.CV_8UC3, this.alpha, this.beta);
 
-            if (this.Options.isReverseColor)
+            if (!this.Options.isReverseColor)
             {
                 Cv2.BitwiseNot(bwSrc, bwSrc);
             }
@@ -107,6 +164,7 @@ namespace netCDFLibrary.Data
                 this.ColorTable.Add(Color.FromArgb(255, v[2], v[1], v[0]));
             }
             List<GradientStop> colors = new List<GradientStop>();
+
             for (int i = 0; i < this.ColorTable.Count; i++)
             {
 

@@ -12,7 +12,7 @@ namespace netCDFLibrary
     {
         private readonly static object[] Empty = Array.Empty<object>();
         private readonly DataSet dataSet;
-        private readonly DateTime unixDate = new DateTime(1990, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+        private readonly DateTime unixDate = new(1990, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         public ReadOnlyDimensionList Dimensions => this.dataSet.Dimensions;
         public ReadOnlyVariableCollection Variables => this.dataSet.Variables;
 
@@ -135,6 +135,8 @@ namespace netCDFLibrary
                 {
                     throw new InvalidOperationException("dataset is null");
                 }
+
+                var item = this.dataSet.Variables[layer];
                 return new NetCDFVariable(this, this.Variables[layer]);
             }
         }
@@ -147,29 +149,28 @@ namespace netCDFLibrary
             return this.Variables.Contains(name);
         }
 
-        public DateTime[] TimeIndex(string timeKey = "time")
+        public TimeIndexer TimeIndex(string timeKey = "time")
         {
-            DateTime[] ret = Array.Empty<DateTime>();
             if (this.dataSet == null)
             {
-                return ret;
+                return TimeIndexer.Empty;
             }
 
             var variables = this.Variables[timeKey];
 
             if (variables == null)
             {
-                return ret;
+                return TimeIndexer.Empty;                
             }
             var times = variables.TypeOfData.Name switch
             {
-                "double" => (double[])variables.GetData(),
-                "Int32" => variables.GetData().Cast<object>().Select(v => Convert.ToDouble(v)).ToArray(),
-                _ => variables.GetData().Cast<object>().Select(v => Convert.ToDouble(v)).ToArray()
+                "Double" => (double[])variables.GetData(),
+                "Int32" => ((int[])variables.GetData()).Select(v => Convert.ToDouble(v) ).ToArray(),
+                _ => ((object[])variables.GetData()).Select(v => Convert.ToDouble(v)).ToArray()
             };
             if (times == null)
             {
-                return ret;
+                return TimeIndexer.Empty;
             }
             Calendar calendar = new GregorianCalendar();
             TimeUnit unit = TimeUnit.Hours;
@@ -204,13 +205,13 @@ namespace netCDFLibrary
                     }
                 }
             }
-            return times.Select(time => unit switch
+            return TimeIndexer.Create(times.Select(time => unit switch
             {
                 TimeUnit.Hours => referenceDate.AddHours(time),
                 TimeUnit.Minutes => referenceDate.AddMinutes(time),
                 TimeUnit.Seconds => referenceDate.AddSeconds(time),
                 _ => referenceDate.AddHours(time),
-            }).ToArray();
+            }).ToArray());
         }
         public void Dispose()
         {
