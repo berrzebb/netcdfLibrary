@@ -2,7 +2,7 @@
 
 namespace netCDFLibrary.Data
 {
-    public record HeatMapOptions(Size kSize,int index = 0, bool isDilate = false, bool isYFlip = false, double sigmaX = 0, double sigmaY = 0, BorderTypes borderTypes = BorderTypes.Default);
+    public record HeatMapOptions(Size kSize,int index = 0, bool isDensity = false, bool isYFlip = false, double sigmaX = 0, double sigmaY = 0, BorderTypes borderTypes = BorderTypes.Default);
     
     public static class HeatMapBuilder
     {
@@ -27,157 +27,95 @@ namespace netCDFLibrary.Data
             Cv2.Merge(mats, dest);
             Show(ref dest, title, isFlip);
         }
+
+        private static Mat Morphology(ref Mat src, Size kernel)
+        {
+            Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, kernel);
+            Mat ret = new Mat();
+            Cv2.MorphologyEx(src, ret, MorphTypes.Gradient, element, new Point(-1, -1));
+            Cv2.Blur(ret, ret, kernel);
+            return ret;
+        }
+
+        private static Mat ReverseColor(ref Mat src, bool isReverse)
+        {
+            if (isReverse)
+            {
+                Cv2.BitwiseNot(src, src);
+            }
+            return src;
+        }
+        private static Mat Threshold(ref Mat src, double thresh, double maxVal)
+        {
+            return src.Threshold(thresh, maxVal, ThresholdTypes.Binary);
+        }
         private static Mat generate_gausian_internal(ColorPalette palette, Mat src, HeatMapOptions? options = null)
         {
-            if (options == null)
-            {
-                options = new HeatMapOptions(new Size(21, 21));
-            }
+            options ??= new HeatMapOptions(new Size(21, 21));
 
-            src.GetArray(out double[] data);
-            Mat blobDistance = new Mat();
-            Mat blobHeatmap = new Mat();
-            Mat bwSrc = new Mat();
-            Mat gaussian = new Mat();
-            Mat element = Cv2.GetStructuringElement(MorphShapes.Ellipse, options.kSize);
+            Mat graySrc = new Mat();
+            src.ConvertTo(graySrc, MatType.CV_8UC1, palette.alpha, palette.beta);
+            Mat target = new Mat();
             Mat dst = new Mat();
-            Mat dst2 = new Mat();
 
-            Cv2.Normalize(src, bwSrc, 0, 255, NormTypes.MinMax, MatType.CV_8UC1);
-            Mat threshold = new Mat();
+            Mat threshold;
 
-            if (options.isDilate)
+            Mat alphaOrigin = new Mat(src.Rows, src.Cols, MatType.CV_8UC1, palette.Options.alphaValue * 255);
+            Mat alpha = new Mat();
+
+            if (options.isDensity)
             {
-//                bwSrc.SaveImage($"grayed_{options.index}.png");
-                Cv2.MorphologyEx(bwSrc, bwSrc, MorphTypes.Gradient, element, new Point(-1, -1), 1);
-                Cv2.Blur(bwSrc, bwSrc, options.kSize);
+                graySrc = Morphology(ref graySrc, options.kSize);
 
-                Cv2.Threshold(bwSrc, threshold, 0, 255, ThresholdTypes.Binary);
-                Cv2.ApplyColorMap(bwSrc, dst, palette.Options.colorMap);
-                // Find Contours
-                Cv2.FindContours(bwSrc, out Point[][] contours, out HierarchyIndex[] hierarchy, RetrievalModes.Tree,
-                    ContourApproximationModes.ApproxSimple, new Point(0, 0));
-                for (int i = 0; i < contours.Length; i++)
-                {
-                    dst.DrawContours(contours, i, Scalar.Blue, 1);
+                threshold = Threshold(ref graySrc, 0, 255);
 
-                }
-
-                Mat dalpha = new Mat(src.Rows, src.Cols, MatType.CV_8UC1, palette.Options.alphaValue * 255);
-                Mat aa = dalpha.BitwiseAnd(threshold);
-                dst.CvtColor(ColorConversionCodes.RGB2BGR);
-                var channel = Cv2.Split(dst);
-                Cv2.Merge(new[] { channel[0], channel[1], channel[2], aa }, dst);
-
-                return dst;
+                graySrc.CopyTo(target);
             }
             else
             {
-                if (palette.Options.isReverseColor)
-                {
-                    // Reverse Color
-                    Cv2.BitwiseNot(bwSrc, bwSrc);
-                }
+                threshold = Threshold(ref graySrc, 0, 255);
 
+                Cv2.GaussianBlur(graySrc, target, options.kSize, options.sigmaX, options.sigmaY,
+                    options.borderTypes);
 
-                // Find Contours
-                Cv2.FindContours(bwSrc, out Point[][] contours, out HierarchyIndex[] hierarchy, RetrievalModes.Tree,
-                    ContourApproximationModes.ApproxSimple, new Point(0, 0));
-                Mat blobMask = Mat.Zeros(bwSrc.Size(), MatType.CV_8UC1);
-
-
-                for (int i = 0; i < contours.Length; i++)
-                {
-                    Cv2.Threshold(bwSrc, threshold, 0, 255, ThresholdTypes.Binary);
-
-                    bwSrc.CopyTo(blobDistance, threshold);
-
-
-                    Cv2.ApplyColorMap(blobDistance, blobHeatmap, palette.Options.colorMap);
-
-                    //Cv2.Dilate(blobHeatmap, blobHeatmap, element, iterations: 3, borderType: options.borderTypes);
-                    Cv2.GaussianBlur(blobHeatmap, blobHeatmap, options.kSize, options.sigmaX, options.sigmaY,
-                        options.borderTypes);
-                    blobHeatmap.CopyTo(dst, threshold);
-                    //dst.DrawContours(contours, i, 255, 5, LineTypes.AntiAlias, hierarchy);
-
-                }
-                var newData = new byte[data.Length];
-                for (int i = 0; i < newData.Length; i++)
-                {
-                    newData[i] = double.IsNaN(data[i]) ? (byte)0 : (byte)(palette.Options.alphaValue * 255);
-                }
-
-                Mat alpha = new Mat(src.Rows, src.Cols, MatType.CV_8UC1, newData);
-                dst.CvtColor(ColorConversionCodes.RGB2BGR);
-                var channel = Cv2.Split(dst);
-
-                Cv2.Merge(new[] { channel[0], channel[1], channel[2], alpha }, dst);
-
-
-                return dst;
+                graySrc.CopyTo(target);
             }
 
+            target = ReverseColor(ref target, palette.Options.isReverseColor);
+
+            Cv2.ApplyColorMap(target, target, palette.Options.colorMap);
+
+            target.CvtColor(ColorConversionCodes.RGB2BGR);
+            var channel = Cv2.Split(target);
+            alphaOrigin.CopyTo(alpha, threshold);
+            Cv2.Merge(new[] { channel[0], channel[1], channel[2], alpha }, target);
+            if (palette.Options.Contours.Count != 0)
+            {
+                foreach (var contourItem in palette.Options.Contours)
+                {
+                    Mat contourThreshold = new Mat();
+                    Mat actualThreshold = new Mat();
+                    Mat hierarchy = new Mat();
+                    Cv2.Threshold(graySrc, contourThreshold, contourItem.Threshold, 255, ThresholdTypes.BinaryInv);
+                    Cv2.CopyTo(contourThreshold, actualThreshold, threshold);
+                    Cv2.FindContours(actualThreshold, out Mat[] contours,hierarchy,
+                        RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
+                    for (int i = 0; i < contours.Length; i++)
+                    {
+                        Cv2.DrawContours(target, contours, i, contourItem.Color, contourItem.Thickness,
+                            LineTypes.AntiAlias);
+                    }
+
+                }
+            }
+
+            Cv2.CopyTo(target, dst);
+            return dst;
         }
         private static Mat generate_gausian_internal(ColorPalette palette, int Rows, int Cols, double[] data, HeatMapOptions? options = null)
         {
             Mat<double> src = new(Rows, Cols, data);
             return generate_gausian_internal(palette, src, options);
-        }
-        
-        private static Mat generate_internal(ColorPalette palette, Mat src, HeatMapOptions? options = null)
-        {
-            if (options == null)
-            {
-                options = new HeatMapOptions(new Size(21,21));
-            }
-
-            src.GetArray(out double[] data);
-            Mat bwSrc = new Mat();
-            src.ConvertTo(bwSrc, MatType.CV_8UC3, palette.alpha, palette.beta);
-
-            if (palette.Options.isReverseColor)
-            {
-                // Reverse Color
-                Cv2.BitwiseNot(bwSrc, bwSrc);
-            }
-            Mat dst = new();
-
-            Cv2.ApplyColorMap(bwSrc, dst, palette.Options.colorMap);
-
-                Cv2.ImShow("dst", dst);
-                // Black White Matrix To Heatmap Matrix
-
-            if (palette.Options.isContour)
-            {
-                var Threshold = bwSrc.AdaptiveThreshold(255, AdaptiveThresholdTypes.MeanC, ThresholdTypes.Binary, palette.Options.maxThreshold, 5);
-                //var Threshold = grayscale.Threshold(palette.threshold, palette.maxThreshold, ThresholdTypes.Binary | ThresholdTypes.Otsu);
-                // Processing Contours
-                using Mat hierachy = new();
-                // Create Threshold
-                Threshold.FindContours(out Mat[] contours, hierachy, RetrievalModes.Tree, ContourApproximationModes.ApproxNone);
-
-                dst.DrawContours(contours, -1, Scalar.FromRgb(255, 255, 255), 1, LineTypes.AntiAlias);
-
-            }
-
-            dst.CvtColor(ColorConversionCodes.RGB2BGR);
-            var channel = Cv2.Split(dst);
-            var newData = new byte[data.Length];
-            for (int i = 0; i < newData.Length; i++)
-            {
-                newData[i] = double.IsNaN(data[i]) ? (byte)0 : (byte)(palette.Options.alphaValue * 255);
-            }
-            Mat a = new Mat(src.Rows, src.Cols, MatType.CV_8UC1, newData);
-            Cv2.Merge(new[] { channel[0], channel[1], channel[2], a }, dst);
-
-
-            return dst;
-        }
-        private static Mat generate_internal(ColorPalette palette, int Rows, int Cols, double[] data, HeatMapOptions? options = null)
-        {
-            Mat<double> src = new(Rows, Cols, data);
-            return generate_internal(palette, src, options);
         }
         private static Mat generate_internal(ColorPalette palette, ref NetCDFPrimitiveData data,HeatMapOptions? options = null)
         {

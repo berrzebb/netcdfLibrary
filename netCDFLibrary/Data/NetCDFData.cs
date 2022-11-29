@@ -83,13 +83,13 @@ namespace netCDFLibrary.Data
         public double XGap => this._scaler.XGap;
         public double YGap => this._scaler.YGap;
         public (double, double) GetOffset(int row, int col) => this._scaler.GetOffset(row, col);
-        public (int, int) FindIndex(double Y, double X) => this._scaler.FindIndex(Y, X, !this.isYFlip);
+        public (int, int) FindIndex(double Y, double X) => this._scaler.FindIndex(Y, X);
         public int GetIndex(int row, int col) => col + (row * this.width);
         public static NetCDFPrimitiveData Create(double minX, double minY, double maxX, double maxY, int width, int height, DataScale dataScale, bool isYFlip, double[] values, StatisticsData statisticsData)
         {
             var ret = new NetCDFPrimitiveData(minX, minY, maxX, maxY, width, height, dataScale, isYFlip, values, statisticsData)
             {
-                _scaler = new CoordinateScaler(minX, maxX, minY, maxY, width, height)
+                _scaler = new CoordinateScaler(minX, maxX, minY, maxY, width, height, isYFlip)
             };
             return ret;
         }
@@ -118,21 +118,21 @@ namespace netCDFLibrary.Data
                 return this.values[index];
             }
         }
-        public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int index, Func<double, double>? transform = null)
+        public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int[] index, Func<double, double>? transform = null)
         {
 
-            if (V.values.Length <= index || this.values.Length <= index)
+            if (V.values.Length <= index[0] || this.values.Length <= index[1])
             {
                 return MagnitudeValue.Empty;
             }
 
-            var u = this.values[index];
+            var u = this.values[index[0]];
             if (double.IsNaN(u))
             {
                 return MagnitudeValue.Empty;
             }
 
-            var v = V.values[index];
+            var v = V.values[index[1]];
             if (double.IsNaN(v))
             {
                 return MagnitudeValue.Empty;
@@ -147,16 +147,22 @@ namespace netCDFLibrary.Data
 
             return MagnitudeValue.Create(direction, value);
         }
-        public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int row, int col, Func<double, double>? transform = null)
+        public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int[] row, int[] col, Func<double, double>? transform = null)
         {
-            if (row == -1 && col == -1)
+            if ((row[0] == -1 && col[0] == -1) || (row[1] == -1 && col[1] == -1))
             {
                 return MagnitudeValue.Empty;
             }
 
-            return this.Magnitude(ref V, this.GetIndex(row, col), transform);
+            return this.Magnitude(ref V, new[] { this.GetIndex(row[0], col[0]),V.GetIndex(row[1],col[1])}, transform);
         }
-        public MagnitudeValue MagnitudeNormalized(ref NetCDFPrimitiveData V, int row, int col, double referenceValue, Func<double, double>? transform = null)
+        public MagnitudeValue MagnitudeNormalized(ref NetCDFPrimitiveData V, int[] index, double referenceValue, Func<double, double>? transform = null)
+        {
+            var result = this.Magnitude(ref V, index, transform);
+
+            return MagnitudeValue.Create(result.direction, result.value, result.value / referenceValue);
+        }
+        public MagnitudeValue MagnitudeNormalized(ref NetCDFPrimitiveData V, int[] row, int[] col, double referenceValue, Func<double, double>? transform = null)
         {
             var result = this.Magnitude(ref V, row, col, transform);
 

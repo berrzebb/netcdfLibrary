@@ -3,12 +3,16 @@
     public record TimeIndex(DateTime date, long Ticks, int index);
     public class TimeIndexer
     {
-        public static readonly TimeIndexer Empty = new(Array.Empty<DateTime>());
+        public static readonly TimeIndexer? Empty = new(Array.Empty<DateTime>());
         private readonly DateTime[] timeIndex;
         private IEnumerable<TimeIndex> Transform(DateTime dateTime) => this.timeIndex.Select((date, index) => new TimeIndex(date, (date - dateTime).Ticks, index));
         private TimeIndexer(params DateTime[] timeIndex)
         {
             this.timeIndex = timeIndex;
+        }
+        public static TimeIndexer? Create(params DateTime[] timeIndex)
+        {
+            return new TimeIndexer(timeIndex);
         }
         public int Count => this.timeIndex.Length;
         public DateTime[] DateTimes => this.timeIndex;
@@ -41,9 +45,6 @@
         {
             return this.Transform(dateTime).Any(v => v.Ticks >= 0);
         }
-        public static TimeIndexer Create(params DateTime[] timeIndex)
-        {
-            return new TimeIndexer(timeIndex);
-        }
+
     }
 }

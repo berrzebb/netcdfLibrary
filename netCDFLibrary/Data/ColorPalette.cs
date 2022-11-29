@@ -3,20 +3,26 @@ using OpenCvSharp;
 
 namespace netCDFLibrary.Data
 {
+    public class ContourItem
+    {
+
+        public double Threshold {get; set;}
+        public Scalar Color {get; set;}
+        public int Thickness {get; set;}
+
+    }
     public class ColorPaletteOptions
     {
-        public ColormapTypes colorMap { get; set; } = ColormapTypes.Jet;
-        public int colorCount { get; set; } = 255;
-        public double lower { get; set; } = 0;
-        public double upper { get; set; } = 1;
+        public ColormapTypes colorMap { get; set; }
+        public int colorCount { get; set; }
+        public double lower { get; set; }
+        public double upper { get; set; }
         public double alphaValue { get; set; } = 1.0;
 
         public bool isYFlip { get; set; } = false;
         public bool isAutoFit { get; set; } = true;
-        public bool isContour { get; set; } = false;
         public bool isReverseColor { get; set; } = false;
-        public byte threshold { get; set; }
-        public byte maxThreshold { get; set; }
+        public List<ContourItem> Contours { get; set; } = new();
 
         public double DataRange => (this.upper - this.lower);
         public double DataOffset => this.lower / this.DataRange;
@@ -85,20 +91,16 @@ namespace netCDFLibrary.Data
         internal static readonly Dictionary<string, ColormapTypes> colorMaps = Enum.GetValues<ColormapTypes>().ToDictionary(v => v.ToString(), v => v);
         public static readonly string[] Palettes = colorMaps.Keys.ToArray();
 
-        public ColorPaletteOptions Options { get; set; } = new ColorPaletteOptions();
-
-        public double alpha2 => (this.Options.alphaValue * 255) / this.Options.DataRange;
-        public double beta2 => -(this.Options.alphaValue * 255) * this.Options.DataOffset;
+        public ColorPaletteOptions Options { get; set; } = new();
 
         public double alpha => 255.0 / this.Options.DataRange;
         public double beta => -255.0 * this.Options.DataOffset;
 
-        public double tickCount { get; init;  }
-        public LinearGradientBrush ColorBrush { get; private set; } = new LinearGradientBrush();
+        public LinearGradientBrush ColorBrush { get; private set; } = new();
 
         private ColorPalette() {
         }
-        private List<Color> ColorTable = new List<Color>();
+        private List<Color> ColorTable = new();
         public Color this[double value]
         {
             get

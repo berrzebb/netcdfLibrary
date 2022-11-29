@@ -2,8 +2,6 @@
 using netCDFLibrary;
 using netCDFLibrary.Data;
 using OpenCvSharp;
-CoordinateTransformatter transformatter = new CoordinateTransformatter();
-
 using (NetCDFLib lib = new NetCDFLib("F:\\sds\\sampleData\\ERA5_2021.nc"))
 {
     lib.ShowMetadata();

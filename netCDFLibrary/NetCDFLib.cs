@@ -75,7 +75,7 @@ namespace netCDFLibrary
             var MinX = (double)Convert.ChangeType(XIndex[0], typeof(double));
             var MaxX = (double)Convert.ChangeType(XIndex[X.Length - 1], typeof(double));
 
-            var IsYFlip = MinY < MaxY;
+            var IsYFlip = MinY > MaxY;
             return new NetCDFBoundaries(
                 MinX, MaxX,
                 Math.Min(MinY, MaxY),
@@ -149,7 +149,7 @@ namespace netCDFLibrary
             return this.Variables.Contains(name);
         }
 
-        public TimeIndexer TimeIndex(string timeKey = "time")
+        public TimeIndexer? TimeIndex(string timeKey = "time")
         {
             if (this.dataSet == null)
             {
