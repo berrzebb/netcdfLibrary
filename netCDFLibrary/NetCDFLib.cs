@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Research.Science.Data;
 
 using Microsoft.Research.Science.Data.Utilities;
@@ -217,7 +216,7 @@ namespace netCDFLibrary
         {
             if (this.dataSet != null)
             {
-                Debug.WriteLine("NetCDF DataSet Release");
+                //Debug.WriteLine("NetCDF DataSet Release");
                 this.dataSet.Dispose();
             }
         }
