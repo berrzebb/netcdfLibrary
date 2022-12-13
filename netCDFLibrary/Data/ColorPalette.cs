@@ -63,14 +63,14 @@ namespace netCDFLibrary.Data
             
         public double Transform(double ratio) => ratio * this.DataRange + this.lower;
 
-        public IEnumerable<string> GenerateTicks(int tickCount = 7)
+        public IEnumerable<string> GenerateTicks(int tickCount = 7, string format = "0.00#")
         {
             for(int i = 0; i < this.colorCount; i++) {
                 if (i % tickCount == 0)
                 {
                     var ratio = (double)i / this.colorCount;
                     var value = this.Transform(ratio);
-                    yield return value.ToString("0.00#");
+                    yield return value.ToString(format);
                 }
             }
         }
@@ -101,6 +101,7 @@ namespace netCDFLibrary.Data
         private ColorPalette() {
         }
         private List<Color> ColorTable = new();
+        private List<Color> RColorTable = new();
         public Color this[double value]
         {
             get
@@ -115,8 +116,9 @@ namespace netCDFLibrary.Data
             var normalizedValue = this.Options.Normalize(value);
             var colorCount = this.Options.colorCount;
             var isReverse = this.Options.isReverseColor;
-            var refCount = (!isReverse ? colorCount : 0);
-            var colorIndex = Math.Abs((refCount - (int)(normalizedValue * colorCount)));
+            var refCount = (isReverse ? colorCount : 0);
+            var colorIndex = (int)(normalizedValue * colorCount);
+            //var colorIndex = Math.Abs(((int)(normalizedValue * colorCount)) - refCount);
             if (colorIndex > colorCount - 1)
             {
                 colorIndex = colorCount - 1;
@@ -125,12 +127,12 @@ namespace netCDFLibrary.Data
         }
         public Color GetColor(int idx)
         {
-            if (idx > this.Options.colorCount || idx > this.ColorTable.Count)
+            if (idx > this.Options.colorCount || idx > this.RColorTable.Count)
             {
                 return Colors.Transparent;
             }
 
-            return this.ColorTable[idx];
+            return this.RColorTable[idx];
         }
         public void UpdatePalette(ColorPaletteOptions options)
         {
@@ -165,7 +167,9 @@ namespace netCDFLibrary.Data
                 var v = cb.Get<Vec3b>(i, 0);
                 this.ColorTable.Add(Color.FromArgb(255, v[2], v[1], v[0]));
             }
-            List<GradientStop> colors = new List<GradientStop>();
+
+            this.RColorTable = this.ColorTable.ToArray().Reverse().ToList();
+                List<GradientStop> colors = new List<GradientStop>();
 
             for (int i = 0; i < this.ColorTable.Count; i++)
             {
