@@ -2,11 +2,12 @@
 
 namespace netCDFLibrary.Data
 {
-    public record HeatMapOptions(Size kSize,int index = 0, bool isDensity = false, bool isYFlip = false, double sigmaX = 0, double sigmaY = 0, BorderTypes borderTypes = BorderTypes.Default);
-    
+    public record HeatMapOptions(Size kSize, int index = 0, bool isDensity = false, bool isYFlip = false, double sigmaX = 0, double sigmaY = 0, BorderTypes borderTypes = BorderTypes.Default);
+
     public static class HeatMapBuilder
     {
         private static readonly int kSize = 9;
+
         private static void Show(ref Mat target, string title, bool isFlip = false)
         {
             if (isFlip)
@@ -45,10 +46,12 @@ namespace netCDFLibrary.Data
             }
             return src;
         }
+
         private static Mat Threshold(ref Mat src, double thresh, double maxVal)
         {
             return src.Threshold(thresh, maxVal, ThresholdTypes.Binary);
         }
+
         private static Mat generate_gausian_internal(ColorPalette palette, Mat src, HeatMapOptions? options = null)
         {
             options ??= new HeatMapOptions(new Size(21, 21));
@@ -89,6 +92,7 @@ namespace netCDFLibrary.Data
             var channel = Cv2.Split(target);
             alphaOrigin.CopyTo(alpha, threshold);
             Cv2.Merge(new[] { channel[0], channel[1], channel[2], alpha }, target);
+            //Show(ref target, "Origin Data", true);
             if (palette.Options.Contours.Count != 0)
             {
                 foreach (var contourItem in palette.Options.Contours)
@@ -96,34 +100,37 @@ namespace netCDFLibrary.Data
                     Mat contourThreshold = new Mat();
                     Mat actualThreshold = new Mat();
                     Mat hierarchy = new Mat();
-                    Cv2.Threshold(graySrc, contourThreshold, contourItem.Threshold, 255, ThresholdTypes.BinaryInv);
+                    Cv2.Threshold(graySrc, contourThreshold, contourItem.Threshold, 255, ThresholdTypes.Binary);
+                    //Show(ref contourThreshold, $"countour {contourItem.Color}", true);
                     Cv2.CopyTo(contourThreshold, actualThreshold, threshold);
-                    Cv2.FindContours(actualThreshold, out Mat[] contours,hierarchy,
+                    Cv2.FindContours(actualThreshold, out Mat[] contours, hierarchy,
                         RetrievalModes.Tree, ContourApproximationModes.ApproxSimple);
                     for (int i = 0; i < contours.Length; i++)
                     {
                         Cv2.DrawContours(target, contours, i, contourItem.Color, contourItem.Thickness,
                             LineTypes.AntiAlias);
                     }
-
                 }
             }
 
             Cv2.CopyTo(target, dst);
             return dst;
         }
+
         private static Mat generate_gausian_internal(ColorPalette palette, int Rows, int Cols, double[] data, HeatMapOptions? options = null)
         {
             Mat<double> src = new(Rows, Cols, data);
             return generate_gausian_internal(palette, src, options);
         }
-        private static Mat generate_internal(ColorPalette palette, ref NetCDFPrimitiveData data,HeatMapOptions? options = null)
+
+        private static Mat generate_internal(ColorPalette palette, ref NetCDFPrimitiveData data, HeatMapOptions? options = null)
         {
             return generate_gausian_internal(palette, data.height, data.width, data.values, options);
         }
+
         public static Mat Generate(ColorPalette palette, Mat source, HeatMapOptions? options = null)
         {
-            options ??= new HeatMapOptions(new Size(21,21));
+            options ??= new HeatMapOptions(new Size(21, 21));
             Mat dst = generate_gausian_internal(palette, source, options);
             if (options.isYFlip)
             {
@@ -132,9 +139,10 @@ namespace netCDFLibrary.Data
             dst.SaveImage("test.png");
             return dst;
         }
+
         public static Mat Generate(ColorPalette palette, int Rows, int Cols, ref double[] data, HeatMapOptions? options = null)
         {
-            options ??= new HeatMapOptions(new Size(21,21));
+            options ??= new HeatMapOptions(new Size(21, 21));
             Mat dst = generate_gausian_internal(palette, Rows, Cols, data, options);
             if (options.isYFlip)
             {
@@ -143,9 +151,10 @@ namespace netCDFLibrary.Data
             dst.SaveImage("test.png");
             return dst;
         }
+
         public static Mat Generate(ColorPalette palette, ref NetCDFPrimitiveData data, HeatMapOptions? options = null)
         {
-            options ??= new HeatMapOptions(new Size(21,21));
+            options ??= new HeatMapOptions(new Size(21, 21));
 
             Mat dst = generate_internal(palette, ref data, options);
             if (options.isYFlip)
@@ -155,9 +164,9 @@ namespace netCDFLibrary.Data
             dst.SaveImage("test.png");
             return dst;
         }
+
         public static bool Generate(ColorPalette palette, ref NetCDFPrimitiveData data, string path, HeatMapOptions? options = null)
         {
-
             Mat dst = Generate(palette, ref data, options);
             dst.SaveImage(path);
             return true;

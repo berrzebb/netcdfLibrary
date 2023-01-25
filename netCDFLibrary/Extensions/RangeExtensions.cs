@@ -6,7 +6,6 @@ namespace netCDFLibrary.Extensions
     {
         internal static (Microsoft.Research.Science.Data.Range, int) Convert(this System.Range range, int length)
         {
-
             int Offset = 0;
             int Length = 0;
             if (range.Start.Value != 0 && range.End.Value != 0)

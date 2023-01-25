@@ -9,7 +9,7 @@ namespace netCDFLibrary
 {
     public class NetCDFLib : IDisposable
     {
-        private readonly static object[] Empty = Array.Empty<object>();
+        private static readonly object[] Empty = Array.Empty<object>();
         private readonly DataSet dataSet;
         private readonly DateTime unixDate = new(1990, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
         public ReadOnlyDimensionList Dimensions => this.dataSet.Dimensions;
@@ -24,12 +24,12 @@ namespace netCDFLibrary
 
             var XIndex = this.Dimensions[X.name];
             var YIndex = this.Dimensions[Y.name];
-                        
 
             var XDim = DataSetDim.Create(X.name, X.range.Convert(XIndex.Length));
             var YDim = DataSetDim.Create(Y.name, Y.range.Convert(YIndex.Length));
             return this.GetBoundaries(XDim, YDim, lookup);
         }
+
         public NetCDFBoundaries GetBoundaries(DataSetDim X, DataSetDim Y, Dictionary<string, string>? lookup = null)
         {
             object[]? YIndex = Array.Empty<object>();
@@ -50,7 +50,7 @@ namespace netCDFLibrary
                     YVariable = this.Variables[yName];
                 }
                 // Lookup에 해당하는 참조 변수가 없다면 비어 있는 바운더리 반환
-                if(XVariable == null || YVariable == null)
+                if (XVariable == null || YVariable == null)
                 {
                     return NetCDFBoundaries.Empty;
                 }
@@ -66,7 +66,6 @@ namespace netCDFLibrary
                 YIndex = this.Index(Y);
                 XIndex = this.Index(X);
             }
-
 
             // Y 의 Min Max는 반전 될 수 있기 때문에 먼저 시작과 끝을 비교한다.
             var MinY = (double)Convert.ChangeType(YIndex[0], typeof(double));
@@ -84,10 +83,12 @@ namespace netCDFLibrary
                 IsYFlip
             );
         }
+
         public NetCDFLib(string path)
         {
             this.dataSet = DataSet.Open($"{path}?openMode=readOnly");
         }
+
         public void ShowMetadata()
         {
             if (this.dataSet == null)
@@ -100,10 +101,12 @@ namespace netCDFLibrary
                 Console.WriteLine(metadata);
             }
         }
+
         public object[] Index(string key)
         {
             return this.Index(key, ..);
         }
+
         public object[] Index(DataSetDim dim)
         {
             if (this.dataSet == null || !this.dataSet.Variables.Contains(dim.name) || !this.Variables.Contains(dim.name))
@@ -114,6 +117,7 @@ namespace netCDFLibrary
 
             return variable.GetData(new[] { dim.range.Origin }, new[] { dim.range.Count }).Cast<object>().ToArray();
         }
+
         public object[] Index(string key, System.Range range)
         {
             if (this.dataSet == null || !this.dataSet.Variables.Contains(key) || !this.Variables.Contains(key) || !this.Dimensions.Contains(key))
@@ -126,6 +130,7 @@ namespace netCDFLibrary
 
             return variable.GetData(new[] { r.Origin }, new[] { r.Count }).Cast<object>().ToArray();
         }
+
         public NetCDFVariable this[string layer]
         {
             get
@@ -139,7 +144,9 @@ namespace netCDFLibrary
                 return new NetCDFVariable(this, this.Variables[layer]);
             }
         }
-        public bool Contains(string name) {
+
+        public bool Contains(string name)
+        {
             if (this.dataSet == null)
             {
                 return false;
@@ -159,12 +166,12 @@ namespace netCDFLibrary
 
             if (variables == null)
             {
-                return TimeIndexer.Empty;                
+                return TimeIndexer.Empty;
             }
             var times = variables.TypeOfData.Name switch
             {
                 "Double" => (double[])variables.GetData(),
-                "Int32" => ((int[])variables.GetData()).Select(v => Convert.ToDouble(v) ).ToArray(),
+                "Int32" => ((int[])variables.GetData()).Select(v => Convert.ToDouble(v)).ToArray(),
                 _ => ((object[])variables.GetData()).Select(v => Convert.ToDouble(v)).ToArray()
             };
             if (times == null)
@@ -212,6 +219,7 @@ namespace netCDFLibrary
                 _ => referenceDate.AddHours(time),
             }).ToArray());
         }
+
         public void Dispose()
         {
             if (this.dataSet != null)

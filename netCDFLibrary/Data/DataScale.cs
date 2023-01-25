@@ -19,7 +19,11 @@ namespace netCDFLibrary.Data
         public readonly string? LongName = "";
         public readonly string? StandardName = "";
         public readonly string? Units = "";
-        internal DataScale(Variable variable) : this(variable, defaultScaleFactorKeys, defaultAddOffsetKeys, defaultMissingValueKeys, defaultFillValueKeys) { }
+
+        internal DataScale(Variable variable) : this(variable, defaultScaleFactorKeys, defaultAddOffsetKeys, defaultMissingValueKeys, defaultFillValueKeys)
+        {
+        }
+
         internal DataScale(Variable variable, string[] ScaleFactorKeys, string[] AddOffsetKeys, string[] MissingValueKeys, string[] FillValueKeys)
         {
             this.Name = variable.Metadata.GetDisplayName();
@@ -65,13 +69,14 @@ namespace netCDFLibrary.Data
                 this.MissingValue = this.FillValue;
             }
         }
+
         internal double Transform(object? value)
         {
             if (value == null)
             {
                 return this.MissingValue;
             }
-            if(Convert.ToDouble(value) == this.MissingValue)
+            if (Convert.ToDouble(value) == this.MissingValue)
             {
                 return this.MissingValue;
             }

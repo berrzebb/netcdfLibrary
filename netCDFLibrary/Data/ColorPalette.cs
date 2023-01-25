@@ -5,12 +5,11 @@ namespace netCDFLibrary.Data
 {
     public class ContourItem
     {
-
-        public double Threshold {get; set;}
-        public Scalar Color {get; set;}
-        public int Thickness {get; set;}
-
+        public double Threshold { get; set; }
+        public Scalar Color { get; set; }
+        public int Thickness { get; set; }
     }
+
     public class ColorPaletteOptions
     {
         public ColormapTypes colorMap { get; set; }
@@ -19,6 +18,7 @@ namespace netCDFLibrary.Data
         public double upper { get; set; }
         public double alphaValue { get; set; } = 1.0;
 
+        public bool isReverse { get; set; } = false;
         public bool isYFlip { get; set; } = false;
         public bool isAutoFit { get; set; } = true;
         public bool isReverseColor { get; set; } = false;
@@ -26,6 +26,7 @@ namespace netCDFLibrary.Data
 
         public double DataRange => (this.upper - this.lower);
         public double DataOffset => this.lower / this.DataRange;
+
         public double Normalize(double value) => (value - this.lower) / this.DataRange;
 
         public double Normalize(double value, double outMin, double outMax)
@@ -58,14 +59,14 @@ namespace netCDFLibrary.Data
 
             ret = ret * (outMax - outMin) + outMin;
             return ret;
-            
         }
-            
+
         public double Transform(double ratio) => ratio * this.DataRange + this.lower;
 
         public IEnumerable<string> GenerateTicks(int tickCount = 7, string format = "0.00#")
         {
-            for(int i = 0; i < this.colorCount; i++) {
+            for (int i = 0; i < this.colorCount; i++)
+            {
                 if (i % tickCount == 0)
                 {
                     var ratio = (double)i / this.colorCount;
@@ -74,6 +75,7 @@ namespace netCDFLibrary.Data
                 }
             }
         }
+
         public ColorPaletteOptions(ColormapTypes colorMap, double lower = 0.0, double upper = 1.0, int colorCount = 255)
         {
             this.colorMap = colorMap;
@@ -81,11 +83,13 @@ namespace netCDFLibrary.Data
             this.upper = upper;
             this.colorCount = colorCount;
         }
+
         public ColorPaletteOptions(string colorMap = "Jet", double lower = 0.0, double upper = 1.0, int colorCount = 255)
             : this(ColorPalette.colorMaps.ContainsKey(colorMap) ? ColorPalette.colorMaps[colorMap] : ColormapTypes.Jet, lower, upper, colorCount)
         {
         }
     }
+
     public class ColorPalette
     {
         internal static readonly Dictionary<string, ColormapTypes> colorMaps = Enum.GetValues<ColormapTypes>().ToDictionary(v => v.ToString(), v => v);
@@ -96,12 +100,17 @@ namespace netCDFLibrary.Data
         public double alpha => 255.0 / this.Options.DataRange;
         public double beta => -255.0 * this.Options.DataOffset;
 
-        public LinearGradientBrush ColorBrush { get; private set; } = new();
+        public LinearGradientBrush ZeroOneColorBrush { get; private set; } = new();
+        public LinearGradientBrush OneZeroColorBrush { get; private set; } = new();
+        public LinearGradientBrush ColorBrush => this.Options.isReverse ? this.OneZeroColorBrush : this.ZeroOneColorBrush;
 
-        private ColorPalette() {
+        private ColorPalette()
+        {
         }
+
         private List<Color> ColorTable = new();
         private List<Color> RColorTable = new();
+
         public Color this[double value]
         {
             get
@@ -111,6 +120,7 @@ namespace netCDFLibrary.Data
                 return this.GetColor(colorIndex);
             }
         }
+
         public int GetColorIndex(double value)
         {
             var normalizedValue = this.Options.Normalize(value);
@@ -125,6 +135,7 @@ namespace netCDFLibrary.Data
             }
             return colorIndex;
         }
+
         public Color GetColor(int idx)
         {
             if (idx > this.Options.colorCount || idx > this.RColorTable.Count)
@@ -134,11 +145,13 @@ namespace netCDFLibrary.Data
 
             return this.RColorTable[idx];
         }
+
         public void UpdatePalette(ColorPaletteOptions options)
         {
             this.Options = options;
             this.UpdatePalette();
         }
+
         public void UpdatePalette()
         {
             var colorCount = this.Options.colorCount;
@@ -148,7 +161,7 @@ namespace netCDFLibrary.Data
             for (int i = 0; i < colorSrc.Rows; i++)
             {
                 var ratio = (double)i / colorSrc.Rows;
-                var value =this.Options.Transform(ratio);
+                var value = this.Options.Transform(ratio);
                 colorSrcIndexer[0, i] = value;
             }
             Mat bwSrc = new();
@@ -169,25 +182,32 @@ namespace netCDFLibrary.Data
             }
 
             this.RColorTable = this.ColorTable.ToArray().Reverse().ToList();
-                List<GradientStop> colors = new List<GradientStop>();
+            List<GradientStop> colors = new List<GradientStop>();
 
             for (int i = 0; i < this.ColorTable.Count; i++)
             {
-
                 colors.Add(new GradientStop()
                 {
                     Color = this.ColorTable[i],
                     Offset = (float)i / colorCount
                 });
             }
-            this.ColorBrush = new LinearGradientBrush()
+            this.ZeroOneColorBrush = new LinearGradientBrush()
             {
                 StartPoint = new System.Windows.Point(0, 0),
                 EndPoint = new System.Windows.Point(0, 1),
                 GradientStops = new GradientStopCollection(colors)
             };
+            this.OneZeroColorBrush = new LinearGradientBrush()
+            {
+                StartPoint = new System.Windows.Point(0, 1),
+                EndPoint = new System.Windows.Point(0, 0),
+                GradientStops = new GradientStopCollection(colors)
+            };
         }
-        public static ColorPalette Create(ColorPaletteOptions options) {
+
+        public static ColorPalette Create(ColorPaletteOptions options)
+        {
             var palette = new ColorPalette();
             palette.UpdatePalette(options);
             return palette;

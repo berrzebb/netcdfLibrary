@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using OpenCvSharp;
 using Range = Microsoft.Research.Science.Data.Range;
 using SystemRange = System.Range;
+
 namespace netCDFLibrary.Data
 {
     public record NetCDFBoundaries(double MinX, double MaxX, double MinY, double MaxY, double Width, double Height, bool isYFlip)
@@ -30,19 +31,20 @@ namespace netCDFLibrary.Data
             direction = this.direction;
             value = this.value;
         }
-
     }
 
     public static class MathExtensions
     {
         public static bool Equals(this double @this, double other, double TOLERANCE = 0.01) => Math.Abs(@this - other) < TOLERANCE;
     }
+
     public class CoordinateTransformatter
     {
         public Func<double, double, (double, double)> LL2XY { get; init; } = (x, y) => (x, y);
         public Func<double, double, (double, double)> XY2LL { get; init; } = (x, y) => (x, y);
     }
-    public record Dim([JsonProperty]string name, [JsonProperty]SystemRange range)
+
+    public record Dim([JsonProperty] string name, [JsonProperty] SystemRange range)
     {
         public static Dim[] Create(Dim[] dims, params (string name, SystemRange range)[] name) => dims.Concat(name.Select(v => new Dim(v.name, v.range))).ToArray();
         public static Dim[] Create(Dim[] dims, params string[] name) => dims.Concat(name.Select(v => new Dim(v, SystemRange.StartAt(0)))).ToArray();
@@ -54,13 +56,11 @@ namespace netCDFLibrary.Data
 
         public static Dim[] Create(string name, SystemRange index) => Create((name, index));
         public static Dim[] Create(string name) => Create((name, 0..1));
-
     }
     public record DataSetDim(string name, Range range, int Length)
     {
         public static DataSetDim Create(string name, Range range, int length) => new(name, range, length);
         public static DataSetDim Create(string name, (Range range, int length) v) => new(name, v.range, v.length);
-
     }
     public record StatisticsData(double MinValue, double MaxValue)
     {
@@ -77,7 +77,7 @@ namespace netCDFLibrary.Data
 
     public record NetCDFPrimitiveData(double minX, double minY, double maxX, double maxY, int width, int height, DataScale dataScale, bool isYFlip, double[] values, StatisticsData Statistics)
     {
-        public static readonly NetCDFPrimitiveData Empty = new(0, 0, 0, 0, 0, 0, new DataScale(),false, Array.Empty<double>(), StatisticsData.Empty);
+        public static readonly NetCDFPrimitiveData Empty = new(0, 0, 0, 0, 0, 0, new DataScale(), false, Array.Empty<double>(), StatisticsData.Empty);
 
         private CoordinateScaler _scaler = CoordinateScaler.Empty;
         public double XGap => this._scaler.XGap;
@@ -120,7 +120,21 @@ namespace netCDFLibrary.Data
         }
         public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int[] index, Func<double, double>? transform = null)
         {
+            double normalize(double value)
+            {
+                double remain = value % 360;
+                if (remain < 0)
+                {
+                    remain += 360.0;
+                }
 
+                return remain;
+            }
+
+            double degrees(double radian)
+            {
+                return radian * (180 / Math.PI);
+            }
             if (V.values.Length <= index[0] || this.values.Length <= index[1])
             {
                 return MagnitudeValue.Empty;
@@ -138,14 +152,19 @@ namespace netCDFLibrary.Data
                 return MagnitudeValue.Empty;
             }
 
-            var direction = (Math.Atan2(v, u) * (180 / Math.PI) + 450) % 360.0;
             var value = Math.Sqrt(Math.Pow(u, 2) + Math.Pow(v, 2));
+            var direction = degrees(Math.Atan2(v, u));
+            var adir = normalize(90 - normalize(direction));
+            var trigFromDir = direction + 180;
+            var cardinalDir = 90 - trigFromDir;
+            var normDir = normalize(cardinalDir);
+
             if (transform != null)
             {
                 value = transform(value);
             }
 
-            return MagnitudeValue.Create(direction, value);
+            return MagnitudeValue.Create(adir, value);
         }
         public MagnitudeValue Magnitude(ref NetCDFPrimitiveData V, int[] row, int[] col, Func<double, double>? transform = null)
         {
@@ -154,7 +173,7 @@ namespace netCDFLibrary.Data
                 return MagnitudeValue.Empty;
             }
 
-            return this.Magnitude(ref V, new[] { this.GetIndex(row[0], col[0]),V.GetIndex(row[1],col[1])}, transform);
+            return this.Magnitude(ref V, new[] { this.GetIndex(row[0], col[0]), V.GetIndex(row[1], col[1]) }, transform);
         }
         public MagnitudeValue MagnitudeNormalized(ref NetCDFPrimitiveData V, int[] index, double referenceValue, Func<double, double>? transform = null)
         {
@@ -169,7 +188,9 @@ namespace netCDFLibrary.Data
             return MagnitudeValue.Create(result.direction, result.value, result.value / referenceValue);
         }
     }
-    public class NetCDFData {
+
+    public class NetCDFData
+    {
         public SystemRange Rows { get; protected set; }
         public SystemRange Cols { get; protected set; }
 
@@ -184,6 +205,7 @@ namespace netCDFLibrary.Data
         protected DataSetDim[] Dimensions;
         private readonly NetCDFVariable? source;
         private readonly NetCDFBoundaries boundaries;
+
         public NetCDFData(NetCDFVariable? variable, Dictionary<string, string>? lookup, params Dim[] dims)
         {
             this.lookup = lookup;
@@ -202,6 +224,7 @@ namespace netCDFLibrary.Data
             this.boundaries = variable.source.GetBoundaries(XDim, YDim, lookup);
             this.IsYFlip = this.boundaries.isYFlip;
         }
+
         public static implicit operator NetCDFPrimitiveData(NetCDFData data) => data.ToPrimitive();
 
         private NetCDFPrimitiveData ToPrimitive()
@@ -230,10 +253,11 @@ namespace netCDFLibrary.Data
             if (type == MatType.CV_16S)
             {
                 missingValue = (dataScale.MissingValue * dataScale.ScaleFactor) + dataScale.AddOffset;
-            } else
+            }
+            else
             {
                 missingValue = Convert.ToDouble(this.source.variable.GetMissingValue());
-                if(double.IsNaN(missingValue) || missingValue == 0)
+                if (double.IsNaN(missingValue) || missingValue == 0)
                 {
                     missingValue = dataScale.MissingValue;
                 }
@@ -242,10 +266,10 @@ namespace netCDFLibrary.Data
 
             for (int row = 0; row < rowLength; row++)
             {
-                for(int col = 0; col < colLength; col++)
+                for (int col = 0; col < colLength; col++)
                 {
                     var v = indexer[row, col];
-                    if(
+                    if (
                         v.Equals(missingValue, 0.01) ||
                         v.Equals(dataScale.FillValue, 0.01) ||
                         v.Equals(9.969209968386869E+36, 0.01) ||
@@ -262,13 +286,15 @@ namespace netCDFLibrary.Data
 
             var statistics = StatisticsData.Create(min, max);
 
-            return NetCDFPrimitiveData.Create(this.MinX, this.MinY, this.MaxX, this.MaxY,  colLength, rowLength, dataScale, this.IsYFlip, values, statistics);
+            return NetCDFPrimitiveData.Create(this.MinX, this.MinY, this.MaxX, this.MaxY, colLength, rowLength, dataScale, this.IsYFlip, values, statistics);
         }
+
         public void Deconstruct(out NetCDFPrimitiveData primitiveData)
         {
             primitiveData = this.ToPrimitive();
         }
     }
+
     public class NetCDFVariable : IDisposable
     {
         internal readonly NetCDFLib source;
@@ -281,7 +307,11 @@ namespace netCDFLibrary.Data
         public string? Name => this.DataScale.Name;
         public string? LongName => this.DataScale.LongName;
         public string? Units => this.DataScale.Units;
-        public NetCDFVariable(NetCDFLib source, Variable variable) : this(source, variable, new DataScale(variable)) { }
+
+        public NetCDFVariable(NetCDFLib source, Variable variable) : this(source, variable, new DataScale(variable))
+        {
+        }
+
         public NetCDFVariable(NetCDFLib source, Variable variable, DataScale dataScale)
         {
             this.source = source;
@@ -289,7 +319,7 @@ namespace netCDFLibrary.Data
             this.DataScale = dataScale;
         }
 
-        public NetCDFData this[Dictionary<string, string>? lookup,params Dim[] dims]
+        public NetCDFData this[Dictionary<string, string>? lookup, params Dim[] dims]
         {
             get => new(this, lookup, dims);
         }
@@ -298,10 +328,12 @@ namespace netCDFLibrary.Data
         {
             return this.variable.GetData();
         }
+
         public Array GetData(int[] origin, int[] shape)
         {
             return this.variable.GetData(origin, shape);
         }
+
         public Array GetData(int[] origin, int[] shape, int[] count)
         {
             return this.variable.GetData(origin, shape, count);

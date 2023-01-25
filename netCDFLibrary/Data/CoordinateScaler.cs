@@ -30,6 +30,7 @@
             this.YGap = (this.MaxY - this.MinY) / this.Height;
             this.IsYFlip = isYFlip;
         }
+
         public CoordinateScaler(double minX, double maxX, double minY, double maxY, double width, double height, double XGap, double YGap, bool isYFlip = false)
         {
             this.MinX = minX;
@@ -44,26 +45,46 @@
         }
 
         public bool XContains(double X) => this.MinX <= X && this.MaxX > X;
+
         public bool YContains(double Y) => this.MinY <= Y && this.MaxY > Y;
+
         public bool Contains(double Y, double X) => this.XContains(X) && this.YContains(Y);
 
         public double XOffset(int col) => this.MinX + (col * this.XGap);
+
         public double YOffset(int row) => this.MinY + (row * this.YGap);
+
         public (double, double) GetOffset(int row, int col) => (this.YOffset(row), this.XOffset(col));
 
         public (double, double) this[int row, int col] => this.GetOffset(row, col);
 
+        private double XNormalize(double value)
+        {
+            return (value > 180) ? value - 360 : value < -180 ? value + 360 : value;
+        }
+
+        private double YNormalize(double value)
+        {
+            return (value > 90) ? value - 180 : value < -90 ? value + 180 : value;
+        }
+
         public int FindYIndex(double Y)
         {
-            if (Y < this.MinY || Y > this.MaxY)
+            var actualY = Y;
+            if (actualY <= this.MinY)
             {
-                return -1;
+                actualY = this.MinY;
             }
 
-            int YOffset = this.IsYFlip ? (int)this.Height : 0;
+            if (actualY >= this.MaxY)
+            {
+                actualY = this.MaxY;
+            }
 
-            var result = (int)((Y - this.MinY) / this.YGap);
-            if(result != 0 && YOffset != 0)
+            int YOffset = this.IsYFlip ? (int)this.Height - 1 : 0;
+
+            var result = (int)((actualY - this.MinY) / this.YGap);
+            if (result != 0 && YOffset != 0)
             {
                 result = Math.Abs(YOffset - result);
             }
@@ -76,29 +97,41 @@
 
         public int FindXIndex(double X)
         {
-            if (X < this.MinX || X > this.MaxX)
+            var actualX = X;
+            if (actualX <= this.MinX)
             {
-                return -1;
+                actualX = this.MinX;
             }
-            var result = (int)((X - this.MinX) / this.XGap);
+
+            if (actualX >= this.MaxX)
+            {
+                actualX = this.MaxX;
+            }
+            var result = (int)((actualX - this.MinX) / this.XGap);
             if (result == (int)this.Width)
             {
                 return result - 1;
             }
             return result;
         }
+
         public (int, int) FindIndex(double Y, double X)
         {
             return (this.FindYIndex(Y), this.FindXIndex(X));
         }
+
         public CoordinateScaler GetNearest(double minX, double minY, double maxX, double maxY)
         {
-            
+            var normMinX = this.XNormalize(minX);
+            var normMinY = this.YNormalize(minY);
+
+            var normMaxX = this.XNormalize(maxX);
+            var normMaxY = this.YNormalize(maxY);
             // Arrange Boundaries
-            var actualMinX = Math.Min(minX, maxX);
-            var actualMaxX = Math.Max(minX, maxX);
-            var actualMinY = Math.Min(minY, maxY);
-            var actualMaxY = Math.Max(minY, maxY);
+            var actualMinX = Math.Min(normMinX, normMaxX);
+            var actualMaxX = Math.Max(normMinX, normMaxX);
+            var actualMinY = Math.Min(normMinY, normMaxY);
+            var actualMaxY = Math.Max(normMinY, normMaxY);
 
             //
             actualMinX = Math.Max(this.MinX, actualMinX);
