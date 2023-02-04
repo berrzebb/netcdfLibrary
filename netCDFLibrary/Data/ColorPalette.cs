@@ -102,7 +102,6 @@ namespace netCDFLibrary.Data
 
         public LinearGradientBrush ZeroOneColorBrush { get; private set; } = new();
         public LinearGradientBrush OneZeroColorBrush { get; private set; } = new();
-        public LinearGradientBrush ColorBrush => this.Options.isReverse ? this.OneZeroColorBrush : this.ZeroOneColorBrush;
 
         private ColorPalette()
         {

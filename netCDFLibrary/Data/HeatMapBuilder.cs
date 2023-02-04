@@ -55,7 +55,26 @@ namespace netCDFLibrary.Data
         private static Mat generate_gausian_internal(ColorPalette palette, Mat src, HeatMapOptions? options = null)
         {
             options ??= new HeatMapOptions(new Size(21, 21));
-
+            /*
+            var src = origin.Clone();
+            var indexer = src.GetGenericIndexer<double>();
+            // min max 임계값 처리
+            for(int row = 0; row < origin.Rows; row++)
+            {
+                for(int col = 0; col < origin.Cols; col++)
+                {
+                    var value = indexer[row, col];
+                    if(value > palette.Options.upper)
+                    {
+                        indexer[row,col] = palette.Options.upper - 0.1;
+                    }
+                    else if(value < palette.Options.lower)
+                    {
+                        indexer[row, col] = palette.Options.lower + 0.1;
+                    }
+                }
+            }
+            */
             Mat graySrc = new Mat();
             src.ConvertTo(graySrc, MatType.CV_8UC1, palette.alpha, palette.beta);
             Mat target = new Mat();

@@ -153,7 +153,7 @@ namespace netCDFLibrary.Data
             }
 
             var value = Math.Sqrt(Math.Pow(u, 2) + Math.Pow(v, 2));
-            var direction = degrees(Math.Atan2(v, u));
+            var direction = degrees(Math.Atan2(v / value, u / value));
             var adir = normalize(90 - normalize(direction));
             var trigFromDir = direction + 180;
             var cardinalDir = 90 - trigFromDir;
